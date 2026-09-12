@@ -1,4 +1,4 @@
-# 🚀 DevOps CLI Agent (Infra Portal)
+# 🚀 DevOps CLI Agent (Devops CLI Assistant)
 
 ![alt text](devops-cli-preview.png)
 A powerful, standalone, and highly interactive Command-Line Interface (CLI) built with Go. This tool acts as a unified "worker agent" and control center for System Administrators and DevOps Engineers to manage servers, perform health checks, automate `rsync` backups, and run background cronjobs—all strictly from the terminal.
