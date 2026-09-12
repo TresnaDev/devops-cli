@@ -1,0 +1,21 @@
+# Binaries
+devops
+devops.exe
+*.test
+*.out
+
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Build & Logs
+scratch/
+output.log
+*.log
+
+# Sensitive Data / Credentials
+deploy.sh
+.env
+*.db
+*.sqlite

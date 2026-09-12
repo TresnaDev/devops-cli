@@ -1,0 +1,27 @@
+#!/bin/bash
+set -e
+
+# --- Configuration ---
+REMOTE_USER="YOUR_USERNAME"
+REMOTE_HOST="YOUR_SERVER_IP"
+REMOTE_BIN="/home/${REMOTE_USER}/.local/bin/devops"
+REMOTE_TMP="/home/${REMOTE_USER}/.local/bin/devops.new"
+SSH_KEY="$HOME/.ssh/your_deploy_key"
+SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new"
+# ---------------------
+
+echo "🔨 Building..."
+go build -o devops .
+
+echo "⏹️  Stopping daemon on remote PC..."
+ssh ${SSH_OPTS} ${REMOTE_USER}@${REMOTE_HOST} "sudo -n systemctl stop devops" || true
+
+echo "📦 Deploying to remote PC..."
+scp -i ${SSH_KEY} ./devops ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_TMP}
+ssh ${SSH_OPTS} ${REMOTE_USER}@${REMOTE_HOST} "mv ${REMOTE_TMP} ${REMOTE_BIN} && chmod +x ${REMOTE_BIN}"
+
+echo "🔄 Restarting daemon..."
+ssh ${SSH_OPTS} ${REMOTE_USER}@${REMOTE_HOST} "sudo -n systemctl restart devops"
+ssh ${SSH_OPTS} ${REMOTE_USER}@${REMOTE_HOST} "systemctl status devops --no-pager" || true
+
+echo "✅ Done!"
