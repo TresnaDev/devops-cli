@@ -290,7 +290,7 @@ func printHermesStyleBanner() {
 	renderedPanels, _ := pterm.DefaultPanel.WithPanels(panels).WithPadding(6).Srender()
 	
 	box := pterm.DefaultBox.
-		WithTitle(" DevOps CLI v1.0.0 ").
+		WithTitle(" DevOps CLI v2.0.0 ").
 		WithTitleTopLeft().
 		WithBoxStyle(pterm.NewStyle(pterm.FgLightYellow)).
 		Sprint(renderedPanels)
