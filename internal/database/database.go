@@ -34,7 +34,7 @@ func InitDB() {
 	}
 
 	// Auto Migrate all models including Setting, ServerEvent and ServerCredential
-	err = db.AutoMigrate(&models.Server{}, &models.Cronjob{}, &models.Setting{}, &models.ServerEvent{}, &models.ServerCredential{})
+	err = db.AutoMigrate(&models.Server{}, &models.Cronjob{}, &models.Setting{}, &models.ServerEvent{}, &models.ServerCredential{}, &models.Endpoint{}, &models.EndpointEvent{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}

@@ -141,9 +141,17 @@ func completer(d prompt.Document) []prompt.Suggest {
 		{Text: "cron-logs", Description: "View background job execution logs"},
 
 		// Backup
-		{Text: "backup-list", Description: "List server backups"},
-		{Text: "backup-create", Description: "Create a new backup"},
+		{Text: "backup-list", Description: "List server backups [--server-id]"},
+		{Text: "backup-create", Description: "Pull backup files from a remote server via rsync"},
 		{Text: "backup-restore", Description: "Restore a server from backup"},
+
+		// HTTP Endpoint Monitoring
+		{Text: "endpoint-list", Description: "List all monitored HTTP/HTTPS endpoints"},
+		{Text: "endpoint-add", Description: "Add a new HTTP/HTTPS endpoint to monitor"},
+		{Text: "endpoint-remove", Description: "Remove a monitored endpoint"},
+		{Text: "endpoint-toggle", Description: "Toggle an endpoint active/paused"},
+		{Text: "endpoint-history", Description: "View event history for a specific endpoint [--id]"},
+		{Text: "check-http", Description: "Run HTTP health check on all active endpoints [--id]"},
 
 		// Security
 		{Text: "security-keygen", Description: "Generate Ed25519 SSH Keypair for the agent"},
