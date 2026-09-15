@@ -41,6 +41,13 @@ var configAlertCmd = &cobra.Command{
 			return
 		}
 
+		pterm.FgGray.Println("  Used to verify your network is up before sending 'Server DOWN' alerts.")
+		pterm.FgGray.Println("  Use a host that is always reachable (e.g. 8.8.8.8:53 or your gateway 192.168.1.1:80).")
+		anchorHost, cancelled := askDefault("Network Anchor Host", "8.8.8.8:53")
+		if cancelled {
+			return
+		}
+
 		if token == "" && chatID == "" {
 			pterm.Error.Println("At least one value (Token or Chat ID) is required.")
 			return
@@ -55,6 +62,8 @@ var configAlertCmd = &cobra.Command{
 			upsertSetting("telegram_chat_id", chatID)
 			pterm.Success.Println("Telegram Chat ID saved.")
 		}
+		upsertSetting("anchor_host", anchorHost)
+		pterm.Success.Printf("Network Anchor Host saved: %s\n", anchorHost)
 
 		pterm.Info.Println("Configuration saved! Run 'test-alert' to verify.")
 	},
@@ -66,6 +75,10 @@ var configViewCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		token := database.GetSetting("telegram_token")
 		chatID := database.GetSetting("telegram_chat_id")
+		anchorHost := database.GetSetting("anchor_host")
+		if anchorHost == "" {
+			anchorHost = "8.8.8.8:53 (default)"
+		}
 
 		fmt.Println()
 		if token == "" {
@@ -81,6 +94,8 @@ var configViewCmd = &cobra.Command{
 		} else {
 			pterm.Info.Println("Telegram Chat ID:", chatID)
 		}
+
+		pterm.Info.Println("Anchor Host     :", anchorHost)
 		fmt.Println()
 	},
 }

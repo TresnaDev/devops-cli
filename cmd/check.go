@@ -58,7 +58,151 @@ func sendTelegramAlert(serverName, host, errorMsg string) {
 	}
 }
 
+// isNetworkReachable checks if the local network is reachable by doing a 3-second TCP
+// dial to the anchor host (default: 8.8.8.8:53). Returns true if reachable.
+func isNetworkReachable() bool {
+	anchorHost := database.GetSetting("anchor_host")
+	if anchorHost == "" {
+		anchorHost = "8.8.8.8:53"
+	}
+	conn, err := net.DialTimeout("tcp", anchorHost, 3*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// sendTelegramResolvedAlert sends a "server back online" notification to Telegram.
+func sendTelegramResolvedAlert(serverName, host string) {
+	token := database.GetSetting("telegram_token")
+	chatID := database.GetSetting("telegram_chat_id")
+
+	if token == "" || chatID == "" {
+		return
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+
+	message := fmt.Sprintf(
+		"✅ <b>SERVER BACK ONLINE</b>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"🖥  <b>Server:</b> <code>%s</code>\n"+
+			"🌐  <b>Host:</b> <code>%s</code>\n"+
+			"✅  <b>Status:</b> <code>UP</code>\n"+
+			"🕐  <b>Resolved at:</b> <code>%s</code>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"✅ Server kembali online dan dapat dijangkau.\n\n"+
+			"<i>— DevOps CLI Monitor</i>",
+		serverName, host,
+		time.Now().Format("02 Jan 2006, 15:04:05 WIB"),
+	)
+
+	payload := map[string]string{
+		"chat_id":    chatID,
+		"text":       message,
+		"parse_mode": "HTML",
+	}
+
+	jsonPayload, _ := json.Marshal(payload)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
+	if err == nil {
+		resp.Body.Close()
+	}
+}
+
+// sendTelegramCredentialResolvedAlert sends a "credential back to valid" notification to Telegram.
+func sendTelegramCredentialResolvedAlert(serverName, host, user string) {
+	token := database.GetSetting("telegram_token")
+	chatID := database.GetSetting("telegram_chat_id")
+
+	if token == "" || chatID == "" {
+		return
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+
+	message := fmt.Sprintf(
+		"✅ <b>CREDENTIAL VALID AGAIN</b>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"🖥  <b>Server:</b> <code>%s</code>\n"+
+			"🌐  <b>Host:</b> <code>%s</code>\n"+
+			"👤  <b>User:</b> <code>%s</code>\n"+
+			"✅  <b>Status:</b> <code>VALID</code>\n"+
+			"🕐  <b>Resolved at:</b> <code>%s</code>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"✅ Credential SSH kembali valid.\n\n"+
+			"<i>— DevOps CLI Monitor</i>",
+		serverName, host, user,
+		time.Now().Format("02 Jan 2006, 15:04:05 WIB"),
+	)
+
+	payload := map[string]string{
+		"chat_id":    chatID,
+		"text":       message,
+		"parse_mode": "HTML",
+	}
+
+	jsonPayload, _ := json.Marshal(payload)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
+	if err == nil {
+		resp.Body.Close()
+	}
+}
+
+// sendTelegramBatchedAlert groups all server events from one check run into a single Telegram message.
+func sendTelegramBatchedAlert(entries []alertEntry) {
+	token := database.GetSetting("telegram_token")
+	chatID := database.GetSetting("telegram_chat_id")
+	if token == "" || chatID == "" {
+		return
+	}
+
+	// Build the list of events
+	lines := ""
+	for _, e := range entries {
+		switch e.status {
+		case "DOWN":
+			lines += fmt.Sprintf("%s  <b>%s</b>  →  <code>DOWN</code>\n    <i>%s</i>\n", e.icon, e.serverName, e.reason)
+		case "RESOLVED":
+			lines += fmt.Sprintf("%s  <b>%s</b>  →  <code>RESOLVED</code>\n    <i>%s</i>\n", e.icon, e.serverName, e.reason)
+		}
+	}
+
+	message := fmt.Sprintf(
+		"🔔 <b>SERVER STATUS UPDATE</b>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"%s"+
+			"━━━━━━━━━━━━━━━━━━━━━━\n"+
+			"🕐 <b>Checked at:</b> <code>%s</code>\n\n"+
+			"<i>— DevOps CLI Monitor</i>",
+		lines,
+		time.Now().Format("02 Jan 2006, 15:04:05 WIB"),
+	)
+
+	payload := map[string]string{
+		"chat_id":    chatID,
+		"text":       message,
+		"parse_mode": "HTML",
+	}
+
+	jsonPayload, _ := json.Marshal(payload)
+	resp, err := http.Post(fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token), "application/json", bytes.NewBuffer(jsonPayload))
+	if err == nil {
+		resp.Body.Close()
+	}
+}
+
 var checkTargetID int
+
+// alertEntry holds a single server status event to be batched into one message.
+type alertEntry struct {
+	icon       string
+	serverName string
+	host       string
+	status     string
+	reason     string
+}
 
 var checkTcpCmd = &cobra.Command{
 	Use:   "check-tcp",
@@ -97,20 +241,25 @@ var checkTcpCmd = &cobra.Command{
 			{"ID", "SERVER", "HOST", "PORT", "STATUS", "LATENCY"},
 		}
 
+		// --- Feature #3: Batched Alert Collector ---
+		// Run sanity check ONCE before the loop (shared for all servers in this run)
+		networkOK := isNetworkReachable()
+		var alertEntries []alertEntry
+
 		for i := range servers {
-			s := &servers[i] // Reference to update DB
+			s := &servers[i]
 			target := fmt.Sprintf("%s:%d", s.Host, s.Port)
 
 			spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Checking %s (%s)...", s.Name, target))
 
 			start := time.Now()
-			// TCP Ping to check if the port is open and responding
 			conn, err := net.DialTimeout("tcp", target, 5*time.Second)
 			latency := time.Since(start)
 
+			networkIssue := false
+			prevStatus := s.LastStatus
+
 			if err != nil {
-				spinner.Fail(fmt.Sprintf("%s is DOWN", s.Name))
-				
 				// Always log for audit trail
 				database.DB.Create(&models.ServerEvent{
 					ServerID:  s.ID,
@@ -119,32 +268,57 @@ var checkTcpCmd = &cobra.Command{
 					Message:   err.Error(),
 				})
 
-				// Only send Telegram alert if status CHANGED
-				if s.LastStatus != "DOWN" {
-					sendTelegramAlert(s.Name, s.Host, err.Error())
+				if !networkOK {
+					database.DB.Create(&models.ServerEvent{
+						ServerID:  s.ID,
+						EventType: "TCP",
+						Status:    "NETWORK_ISSUE",
+						Message:   "Local network unreachable; skipping Telegram alert",
+					})
+					spinner.Fail(fmt.Sprintf("%s — LOCAL NETWORK ISSUE", s.Name))
+					networkIssue = true
+				} else {
+					spinner.Fail(fmt.Sprintf("%s is DOWN", s.Name))
+					// Collect alert only if status changed
+					if prevStatus != "DOWN" {
+						alertEntries = append(alertEntries, alertEntry{
+							icon: "🔴", serverName: s.Name, host: s.Host,
+							status: "DOWN", reason: err.Error(),
+						})
+					}
 				}
 				s.LastStatus = "DOWN"
 			} else {
 				conn.Close()
 				spinner.Success(fmt.Sprintf("%s is UP (%v)", s.Name, latency.Round(time.Millisecond)))
-				
-				// Always log for audit trail
+
 				database.DB.Create(&models.ServerEvent{
 					ServerID:  s.ID,
 					EventType: "TCP",
 					Status:    "UP",
 					Message:   fmt.Sprintf("Connection successful (%v)", latency.Round(time.Millisecond)),
 				})
-				
+
+				// Collect resolved alert if server was previously DOWN
+				if prevStatus == "DOWN" {
+					alertEntries = append(alertEntries, alertEntry{
+						icon: "✅", serverName: s.Name, host: s.Host,
+						status: "RESOLVED", reason: fmt.Sprintf("Back online (%v)", latency.Round(time.Millisecond)),
+					})
+				}
 				s.LastStatus = "UP"
 			}
 
-			// Update LastStatus in Database
 			database.DB.Save(s)
 
 			// Format for final table
-			statusStr := pterm.FgGreen.Sprint("UP")
-			if s.LastStatus == "DOWN" {
+			var statusStr string
+			switch {
+			case s.LastStatus == "UP":
+				statusStr = pterm.FgGreen.Sprint("UP")
+			case networkIssue:
+				statusStr = pterm.FgYellow.Sprint("LOCAL NETWORK ISSUE")
+			default:
 				statusStr = pterm.FgRed.Sprint("DOWN")
 			}
 
@@ -169,6 +343,11 @@ var checkTcpCmd = &cobra.Command{
 			WithData(tableData).Render()
 
 		pterm.Success.Println("\nHealth check completed! Database has been updated.")
+
+		// --- Feature #3: Send ONE batched Telegram message for all events ---
+		if len(alertEntries) > 0 && networkOK {
+			sendTelegramBatchedAlert(alertEntries)
+		}
 	},
 }
 
@@ -625,8 +804,6 @@ var checkCredentialCmd = &cobra.Command{
 
 				var credStatusStr string
 				if err != nil {
-					spinner.Fail(fmt.Sprintf("[%s] - %s@%s — INVALID: %v", s.Name, c.User, s.Host, err))
-
 					// Always log for audit trail
 					database.DB.Create(&models.ServerEvent{
 						ServerID:  s.ID,
@@ -635,10 +812,18 @@ var checkCredentialCmd = &cobra.Command{
 						Message:   fmt.Sprintf("[%s] %s: %s", c.Label, c.User, err.Error()),
 					})
 
-					// Alert only if status changed
+					// Feature #1: Only alert if status changed AND network is healthy
 					if c.Status != "invalid" {
-						sendTelegramCredentialAlert(s.Name, s.Host, c.User, fmt.Sprintf("[%s] %s", c.Label, err.Error()))
+						if isNetworkReachable() {
+							sendTelegramCredentialAlert(s.Name, s.Host, c.User, fmt.Sprintf("[%s] %s", c.Label, err.Error()))
+							spinner.Fail(fmt.Sprintf("[%s] - %s@%s — INVALID: %v", s.Name, c.User, s.Host, err))
+						} else {
+							spinner.Fail(fmt.Sprintf("[%s] - %s@%s — INVALID (LOCAL NETWORK ISSUE)", s.Name, c.User, s.Host))
+						}
+					} else {
+						spinner.Fail(fmt.Sprintf("[%s] - %s@%s — INVALID: %v", s.Name, c.User, s.Host, err))
 					}
+
 					c.Status = "invalid"
 					credStatusStr = pterm.FgRed.Sprint("INVALID ✗")
 				} else {
@@ -651,6 +836,11 @@ var checkCredentialCmd = &cobra.Command{
 						Status:    "VALID",
 						Message:   fmt.Sprintf("[%s] %s: Authentication successful", c.Label, c.User),
 					})
+
+					// Feature #2: Send resolved alert if credential was previously invalid
+					if c.Status == "invalid" {
+						sendTelegramCredentialResolvedAlert(s.Name, s.Host, c.User)
+					}
 
 					c.Status = "valid"
 					credStatusStr = pterm.FgGreen.Sprint("VALID ✓")
