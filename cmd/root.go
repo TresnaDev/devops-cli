@@ -43,7 +43,7 @@ func printAsciiHeaderOnly() {
 
 	info := pterm.LightYellow("  Author  ") + pterm.FgWhite.Sprint("TresnaAgustina") +
 		pterm.FgGray.Sprint("   │   ") +
-		pterm.LightYellow("Version  ") + pterm.FgWhite.Sprint("1.0.0") +
+		pterm.LightYellow("Version  ") + pterm.FgWhite.Sprint("2.0.0") +
 		pterm.FgGray.Sprint("   │   ") +
 		pterm.LightYellow("DB  ") + pterm.FgWhite.Sprint("~/.devops/devops.db") +
 		pterm.FgGray.Sprint("   │   ") +
@@ -246,7 +246,7 @@ func printHermesStyleBanner() {
 
 	leftInfo := "\n" +
 		pterm.LightYellow("Author: ") + "TresnaAgustina\n" +
-		pterm.LightYellow("Version: ") + "1.0.0 (2026)\n" +
+		pterm.LightYellow("Version: ") + "2.0.0 (2026)\n" +
 		pterm.LightYellow("System: ") + "Linux/Amd64\n" +
 		pterm.FgGray.Sprint("Session: db_local_sqlite")
 
